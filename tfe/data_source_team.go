@@ -33,60 +33,71 @@ func dataSourceTFETeam() *schema.Resource {
 }
 
 func dataSourceTFETeamRead(d *schema.ResourceData, meta interface{}) error {
-	config := meta.(ConfiguredClient)
+    config := meta.(ConfiguredClient)
 
-	// Get the name and organization.
-	name := d.Get("name").(string)
-	organization, err := config.schemaOrDefaultOrganization(d)
-	if err != nil {
-		return err
-	}
+    // Get the name and organization.
+    name := d.Get("name").(string)
+    organization, err := config.schemaOrDefaultOrganization(d)
+    if err != nil {
+        return err
+    }
 
-	tl, err := config.Client.Teams.List(ctx, organization, &tfe.TeamListOptions{
-		Names: []string{name},
-	})
-	if err != nil {
-		return fmt.Errorf("Error retrieving teams: %w", err)
-	}
+    tl, err := config.Client.Teams.List(ctx, organization, &tfe.TeamListOptions{
+        Names: []string{name},
+    })
+    if err != nil {
+        return fmt.Errorf("Error retrieving teams: %w", err)
+    }
 
-	switch len(tl.Items) {
-	case 0:
-		return fmt.Errorf("could not find team %s/%s", organization, name)
-	case 1:
-		// We check this just in case a user's TFE instance only has one team
-		// and doesn't support the filter query param
-		if tl.Items[0].Name != name {
-			return fmt.Errorf("could not find team %s/%s", organization, name)
-		}
+    switch len(tl.Items) {
+    case 0:
+        // Set the resource data to null values
+        d.SetId("")
+        d.Set("sso_team_id", nil)
+        return nil
+    case 1:
+        // We check this just in case a user's TFE instance only has one team
+        // and doesn't support the filter query param
+        if tl.Items[0].Name != name {
+            // Set the resource data to null values
+            d.SetId("")
+            d.Set("sso_team_id", nil)
+            return nil
+        }
 
-		d.SetId(tl.Items[0].ID)
-		d.Set("sso_team_id", tl.Items[0].SSOTeamID)
+        d.SetId(tl.Items[0].ID)
+        d.Set("sso_team_id", tl.Items[0].SSOTeamID)
 
-		return nil
-	default:
-		options := &tfe.TeamListOptions{}
+        return nil
+    default:
+        options := &tfe.TeamListOptions{}
 
-		for {
-			for _, team := range tl.Items {
-				if team.Name == name {
-					d.SetId(team.ID)
-					d.Set("sso_team_id", team.SSOTeamID)
-					return nil
-				}
-			}
+        for {
+            for _, team := range tl.Items {
+                if team.Name == name {
+                    d.SetId(team.ID)
+                    d.Set("sso_team_id", team.SSOTeamID)
+                    return nil
+                }
+            }
 
-			if tl.CurrentPage >= tl.TotalPages {
-				break
-			}
+            if tl.CurrentPage >= tl.TotalPages {
+                break
+            }
 
-			options.PageNumber = tl.NextPage
+            options.PageNumber = tl.NextPage
 
-			tl, err = config.Client.Teams.List(ctx, organization, options)
-			if err != nil {
-				return fmt.Errorf("Error retrieving teams: %w", err)
-			}
-		}
-	}
+            tl, err = config.Client.Teams.List(ctx, organization, options)
+            if err != nil {
+                return fmt.Errorf("Error retrieving teams: %w", err)
+            }
+        }
+    }
 
-	return fmt.Errorf("could not find team %s/%s", organization, name)
+    // Set the resource data to null values
+    d.SetId("")
+    d.Set("sso_team_id", nil)
+
+    return nil
 }
+
